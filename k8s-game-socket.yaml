@@ -1,0 +1,121 @@
+#socket
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: socket
+  namespace: loadtesting
+spec:
+  minReadySeconds: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 2
+  replicas: 1
+  selector:
+    matchLabels:
+      app: socket
+  template:
+    metadata:
+      labels:
+        app: socket
+    spec:
+      containers:
+      - name: socket
+        image: 755240510933.dkr.ecr.eu-west-2.amazonaws.com/v3:v3-socket-loadtest-v2.5
+        imagePullPolicy: Always
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 3
+          failureThreshold: 3
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            port: 3000
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 3
+          failureThreshold: 3
+          periodSeconds: 10
+        # resources:
+        #   limits:
+        #     cpu: 200m
+        #     memory: 0.5Gi
+        #   requests:
+        #     cpu: 100m
+        #     memory: 0.5Gi   
+        ports:
+        - containerPort: 3000
+          name: ui
+        - containerPort: 8080
+          name: socket
+      # terminationGracePeriodSeconds: 90
+      imagePullSecrets:
+      - name: vecr
+#socket-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: socket
+  namespace: loadtesting
+spec:
+  # type: LoadBalancer 
+  ports:
+  - name: ui
+    protocol: TCP
+    port: 3000
+    targetPort: 3000
+  - name: socket
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: socket
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: websocket-ingress
+  namespace: loadtesting
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/session-cookie-hash: sha1
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+
+spec:
+  tls:
+  - hosts:
+    - load-socket.techops.co.in
+    - load-ui.techops.co.in
+    secretName: socket-ssl
+  # ingressClassName: alb
+  rules:
+  - host: load-ui.techops.co.in
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: socket
+            port:
+              number: 3000
+  - host: load-socket.techops.co.in
+    http:
+      paths:
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: socket
+            port:
+              number: 8080
+

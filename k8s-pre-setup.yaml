@@ -1,0 +1,28 @@
+#namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: loadtesting
+#ECR
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vecr
+  namespace: loadtesting
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: "your registory creds"
+
+#SSL
+---
+apiVersion: v1
+data:
+  tls.crt:
+  tls.key:
+kind: Secret
+metadata:
+  name: socket-ssl
+  namespace: loadtesting
+  # namespace: default
+type: kubernetes.io/tls

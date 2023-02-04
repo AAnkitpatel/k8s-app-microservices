@@ -1,0 +1,102 @@
+#game-reader
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-reader
+  namespace: loadtesting
+  labels:
+    app: game-reader
+spec:
+  selector:
+    matchLabels:
+      app: game-reader
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: game-reader
+    spec:
+      containers:
+      - name: game-reader
+        image: 755240510933.dkr.ecr.eu-west-2.amazonaws.com/v3:v3-game-reader-v3
+        resources:
+          requests:
+            cpu: 90m
+            memory: 500Mi
+          limits:
+            cpu: 100m
+            memory: 600Mi
+        livenessProbe:
+          tcpSocket:
+            port: 1337
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            port: 1337
+          initialDelaySeconds: 5
+          timeoutSeconds: 2
+          successThreshold: 1
+          failureThreshold: 3
+          periodSeconds: 10
+        ports:
+        - containerPort: 1337
+          name: game-reader
+      imagePullSecrets:
+      - name: vecr
+---
+#game-reader
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-reader
+  namespace: loadtesting
+spec:
+  # type: LoadBalancer
+  selector:
+    app: game-reader
+  ports:
+  - name: game-reader
+    protocol: TCP
+    port: 1337
+    targetPort: 1337
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reader-ingress
+  namespace: loadtesting
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/session-cookie-hash: sha1
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  tls:
+  - hosts:
+    - load-reader.techops.co.in
+    secretName: socket-ssl
+  # ingressClassName: alb
+  rules:
+  - host: load-reader.techops.co.in
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: game-reader
+            port:
+              number: 1337
